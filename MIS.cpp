@@ -1,14 +1,11 @@
 #include <cstdlib>
 #include <set>
-#include <vector>
 #include <iostream>
-#include <tuple>
 
 std::set< std::set<int> > MIS(double **mat, int num_nodes){
 
     std::set< std::set<int> > mis;
     std::set<int> I;
-    //int cur_len = 0;
     int num_remain = num_nodes;
     std::set<int> nodes_remain;
     for (int i = 0; i < num_nodes; i++)
@@ -20,8 +17,6 @@ std::set< std::set<int> > MIS(double **mat, int num_nodes){
 
     //neighbors.insert(0);
     I.insert(cur_node);
-
-    //int count = 0;
 
     while (!nodes_remain.empty())
     {
@@ -50,6 +45,7 @@ std::set< std::set<int> > MIS(double **mat, int num_nodes){
         }
 
         mis.insert(I);
+        I.clear();
         // Code for testing, commented out:
         // std::cout << "What neighbors look like:";
         // for (std::set<int>::const_iterator j = neighbors.begin(); j != neighbors.end(); ++j)
@@ -59,10 +55,8 @@ std::set< std::set<int> > MIS(double **mat, int num_nodes){
         // for (std::set<int>::const_iterator j = I.begin(); j != I.end(); ++j)
         //     std::cout << *j << ' ';
         // std::cout << std::endl;
-        I.clear();
         // std::cout << "One set DONE" << std::endl;
         // std::cout <<std::endl;
-
         num_remain = neighbors.size();
         nodes_remain = neighbors;
         if(!nodes_remain.empty()){
@@ -70,10 +64,6 @@ std::set< std::set<int> > MIS(double **mat, int num_nodes){
             I.insert(cur_node);
         }
         neighbors.clear();
-
-        // count++;
-        // if (count > 5)
-        //     break;
 
     }
     
@@ -141,23 +131,12 @@ int main(int argc, char* argv[]){
     test[5] = val5;
     
     std::set< std::set<int> > I = MIS(test, 6);
-
-    // for (int i = 0; i < 5; i++)
-    // {
-    //     for (int j = 0; j < 5; j++)
-    //     {
-    //         std::cout << test[i][j] << ' ';
-    //     }
-    //     std::cout << '\n';
-    // }
     
+    // Print out the maximal independent sets
     for (std::set< std::set<int> >::const_iterator i = I.begin(); i != I.end(); ++i){
         for (std::set<int>::const_iterator j = (*i).begin(); j != (*i).end(); ++j)
             std::cout << *j << ' ';
         std::cout << "one set done!" << '\n';
     }
-
-    // for (std::set<int>::const_iterator j = I2.begin(); j != I2.end(); ++j)
-    //     std::cout << *j << ' ';
         
 }
