@@ -3,7 +3,7 @@
 #include <set>
 #include <vector>
 #include <iostream>
-#define INDEX(x,y) (uint64_t)(x * num_nodes + y)
+//#define INDEX(x,y) (uint64_t)(x * num_nodes + y)
 
 // std::set <int> MIS(double *mat, int num_nodes){
 
@@ -72,12 +72,15 @@ void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    std::cout << "Entering rank: " << rank << std::endl;
+
     int nodes_left = num_nodes % num_procs;
     int nodes_per_proc = (num_nodes - nodes_left) / num_procs;
     double *recv = (double*) malloc(sizeof(double) * num_nodes * nodes_per_proc);
     int len_grp_size = (nodes_left == 0) ? num_procs : (num_procs + 1);
     int* send_counts = (int*)malloc(sizeof(int) * len_grp_size);
     int* displs = (int*)malloc(sizeof(int) * len_grp_size);
+    int cur_node;
 
     for (int i = 0; i < len_grp_size; i++)
     {
@@ -99,29 +102,35 @@ void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int 
     // MPI_Scatterv(mat, send_counts, displs, MPI_DOUBLE, recv, 
     //     nodes_per_proc * num_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Scatter(mat, nodes_per_proc * num_nodes, MPI_DOUBLE, recv, nodes_per_proc * num_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    std::cout << "Current rank is: " << rank << std::endl;
-    print_arr(recv, nodes_per_proc * num_nodes);
+    
+    // print_arr(recv, nodes_per_proc * num_nodes);
 
-    // SEG FAULT here
     for (int i = 0; i < nodes_per_proc; i++)
     {
+        cur_node = rank * nodes_per_proc + i;
         //check whether node i has bigger random value than all its neighbors
         for (int j = 0; j < num_nodes; j++)
         {
-            if (rand_vals[i] < rand_vals[j] && recv[INDEX(i, j)] > 0)
+            if (rand_vals[cur_node] < rand_vals[j] && recv[i * num_nodes + j] > 0)
                 flag = 0;
         }
         //if it does, add i to M and delete i and its neighbors from A
         if (flag){
             for (int j = 0; j < num_nodes; j++)
             {
-                if(recv[INDEX(i, j)] > 0)
+                // Delete the neighbors of the current node
+                if(recv[i * num_nodes + j] > 0)
                     active_nodes.erase(j);
             }
-            active_nodes.erase(i);
-            M.insert(i);
+            
+            active_nodes.erase(cur_node); // This line is wrong!!
+            M.insert(cur_node);
         }
     }
+
+    free(recv);
+    free(send_counts);
+    free(displs);
 
     MPI_Barrier(MPI_COMM_WORLD);
     //MPI_Finalize();
@@ -137,37 +146,47 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     
     std::vector<int> rand_vals;
 
-    MPI_Init(NULL, NULL);
+    //MPI_Init(NULL, NULL);
 
-    // int count;
+    int count;
 
     while (!A.empty())
     {
         //rand_vals = (int*) malloc(sizeof(int) * A.size());
         //rand_vals = assign_rand_vals(5);
         assign_rand_vals(rand_vals, num_nodes);
-
         M_temp.clear();
-
-        for (std::set<int>::const_iterator i = A.begin(); i != A.end(); ++i)
-            add_and_record(mat, rand_vals, num_nodes, num_procs, A, M);
-
+        add_and_record(mat, rand_vals, num_nodes, num_procs, A, M_temp);
+        M.insert(M_temp.begin(), M_temp.end());
         rand_vals.clear();
 
-        // count++;
-        // if(count > 100){
-        //     std::cout << "infinite loop :(\n";
-        //     break;
-        // }
+        std::cout << "active nodes in this round:" << std::endl;
+        for(std::set<int>::const_iterator i = A.begin(); i != A.end(); i++)
+            std::cout << *i << ' ';
+        std::cout << std::endl;
+
+        count++;
+        if(count > 6){
+            std::cout << "infinite loop :(\n";
+            break;
+        }
     }
 
-    MPI_Finalize();
+    std::cout << "Got out of While!!" << std::endl;
+
+    //MPI_Finalize();
 
     return M;
 
 }
 
+void erase_test(std::set<int> &S) {
+    S.erase(3);
+}
+
 int main(int argc, char* argv[]){
+
+    MPI_Init(NULL, NULL);
     
     double *test;
     test = new double [36];
@@ -204,7 +223,15 @@ int main(int argc, char* argv[]){
 
     std::set<int> I = MIS(test, 6, 6);
 
-    for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
-        std::cout << *i << ' ';
+    std::cout << "Got out of MIS!!" << std::endl;
+
+    if (!I.empty())
+        for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
+            std::cout << *i << ' ';
+
+    // std::set<int> I;
+    // erase_test(I);
+
+    MPI_Finalize();
 
 }
