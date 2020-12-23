@@ -21,7 +21,7 @@ void print_arr(double *array, int len) {
 
 //     MPI_Init(NULL, NULL);
 
-//     int *recv = (int*) malloc(sizeof(int) * num_nodes);
+//     int *mat_recv = (int*) malloc(sizeof(int) * num_nodes);
 //     // Send buffer of length 1
 //     int *send = (int*) malloc(sizeof(int));
 //     int rank;
@@ -37,15 +37,15 @@ void print_arr(double *array, int len) {
 //     send[0] = rand();
 //     // printf("sending %d\n", send[0]);
 
-//     MPI_Allgather(send, 1, MPI_INT, recv, 1, MPI_INT, MPI_COMM_WORLD);
+//     MPI_Allgather(send, 1, MPI_INT, mat_recv, 1, MPI_INT, MPI_COMM_WORLD);
 
 //     //printf("This is root and the values are assigned \n");
 //     free(*nodes);
 //     *nodes = (int*)malloc(5 * sizeof(int));
-//     *nodes = recv;
+//     *nodes = mat_recv;
     
 //     free(send);
-//     //free(recv);
+//     //free(mat_recv);
 
 //     MPI_Barrier(MPI_COMM_WORLD);
 //     MPI_Finalize();
@@ -61,7 +61,7 @@ void assign_rand_vals(std::vector<int> &rand_vals, int num_nodes){
     
 }
 
-void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int num_procs, std::set<int> &active_nodes, std::set<int> &M){
+void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int num_procs, std::set<int> &neighbors, std::set<int> &M){
 
     //MPI_Init(NULL, NULL);
     int rank;
@@ -72,16 +72,20 @@ void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    std::cout << "Entering rank: " << rank << std::endl;
-
+    // For MPI_Scatterv
     int nodes_left = num_nodes % num_procs;
     int nodes_per_proc = (num_nodes - nodes_left) / num_procs;
-    double *recv = (double*) malloc(sizeof(double) * num_nodes * nodes_per_proc);
     int len_grp_size = (nodes_left == 0) ? num_procs : (num_procs + 1);
     int* send_counts = (int*)malloc(sizeof(int) * len_grp_size);
     int* displs = (int*)malloc(sizeof(int) * len_grp_size);
+
+    // Buffer to hold the nodes scattered to each process
+    double *mat_recv = (double*) malloc(sizeof(double) * num_nodes * nodes_per_proc);
+
+    // The node in consideration
     int cur_node;
 
+    // Compute send_counts and displacements
     for (int i = 0; i < len_grp_size; i++)
     {
         if (nodes_left)
@@ -99,38 +103,57 @@ void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int 
 
     // print_arr(send_counts, num_procs);
     // print_arr(displs, num_procs);
-    // MPI_Scatterv(mat, send_counts, displs, MPI_DOUBLE, recv, 
+    // MPI_Scatterv(mat, send_counts, displs, MPI_DOUBLE, mat_recv, 
     //     nodes_per_proc * num_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    MPI_Scatter(mat, nodes_per_proc * num_nodes, MPI_DOUBLE, recv, nodes_per_proc * num_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    
-    // print_arr(recv, nodes_per_proc * num_nodes);
+    MPI_Scatter(mat, nodes_per_proc * num_nodes, MPI_DOUBLE, mat_recv, nodes_per_proc * num_nodes, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    // print_arr(mat_recv, nodes_per_proc * num_nodes);
 
+    
     for (int i = 0; i < nodes_per_proc; i++)
     {
         cur_node = rank * nodes_per_proc + i;
         //check whether node i has bigger random value than all its neighbors
         for (int j = 0; j < num_nodes; j++)
         {
-            if (rand_vals[cur_node] < rand_vals[j] && recv[i * num_nodes + j] > 0)
+            if (rand_vals[cur_node] < rand_vals[j] && mat_recv[i * num_nodes + j] > 0)
                 flag = 0;
         }
-        //if it does, add i to M and delete i and its neighbors from A
+        //if it does, add i to M'
         if (flag){
             for (int j = 0; j < num_nodes; j++)
             {
                 // Delete the neighbors of the current node
-                if(recv[i * num_nodes + j] > 0)
-                    active_nodes.erase(j);
+                if(mat_recv[i * num_nodes + j] > 0)
+                    neighbors.insert(j);
             }
-            
-            active_nodes.erase(cur_node); // This line is wrong!!
+            // active_nodes.erase(cur_node);
             M.insert(cur_node);
         }
     }
 
-    free(recv);
+    // should gather deleting nodes here, use MPI_Gatherv
+    // Buffer for the nodes to add
+    int* all_M = NULL;
+    if (rank == 0)
+        all_M = (int*)malloc(sizeof(int) * num_nodes);
+    MPI_Gather(all_M, M.size(), MPI_INT, all_M, M.size(), MPI_INT, 0, MPI_COMM_WORLD);
+
+    // The neighbors of the nodes
+    int* all_nbrs = NULL;
+    if (rank == 0)
+        all_nbrs = (int*)malloc(sizeof(int) * num_nodes);
+    MPI_Gather(&all_nbrs, neighbors.size(), MPI_INT, all_nbrs, neighbors.size(), MPI_INT, 0, MPI_COMM_WORLD);
+
+    if(rank == 0) {
+
+    }
+    free(mat_recv);
     free(send_counts);
     free(displs);
+    if (rank == 0){
+        free(all_nbrs);
+        free(all_M);
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     //MPI_Finalize();
@@ -139,7 +162,7 @@ void add_and_record(double* mat, std::vector<int> rand_vals, int num_nodes, int 
 
 std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
-    std::set<int> A, M, M_temp;
+    std::set<int> A, M, M_temp, neighbors;
 
     for (int i = 0; i < num_nodes; i++)
         A.insert(i);
@@ -156,8 +179,16 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         //rand_vals = assign_rand_vals(5);
         assign_rand_vals(rand_vals, num_nodes);
         M_temp.clear();
-        add_and_record(mat, rand_vals, num_nodes, num_procs, A, M_temp);
+        neighbors.clear();
+        // Add fitting nodes to M'
+        add_and_record(mat, rand_vals, num_nodes, num_procs, neighbors, M_temp);
+        // M = union(M, M')
         M.insert(M_temp.begin(), M_temp.end());
+        // Delete M' and neighbors from A
+        for(std::set<int>::const_iterator i = M_temp.begin(); i != M_temp.end(); i++)
+            A.erase(*i);
+        for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
+            A.erase(*i);
         rand_vals.clear();
 
         std::cout << "active nodes in this round:" << std::endl;
@@ -166,13 +197,11 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         std::cout << std::endl;
 
         count++;
-        if(count > 6){
+        if(count > 1000){
             std::cout << "infinite loop :(\n";
             break;
         }
     }
-
-    std::cout << "Got out of While!!" << std::endl;
 
     //MPI_Finalize();
 
@@ -222,8 +251,6 @@ int main(int argc, char* argv[]){
     test[33] = 0;
 
     std::set<int> I = MIS(test, 6, 6);
-
-    std::cout << "Got out of MIS!!" << std::endl;
 
     if (!I.empty())
         for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
