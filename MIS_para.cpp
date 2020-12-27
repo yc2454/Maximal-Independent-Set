@@ -7,10 +7,6 @@
 #include <cmath>
 //#define INDEX(x,y) (uint64_t)(x * num_nodes + y)
 
-// std::set <int> MIS(double *mat, int num_nodes){
-
-// }
-
 void print_arr(int *array, int len) {
     for (int i = 0; i < len; i++)
     {
@@ -147,9 +143,11 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
                     // Delete the neighbors of the current node
                     if(mat[cur_node * num_nodes + j] > 0 && 
                         (A.find(j) != A.end())) {
+                        if (neighbors.find(j) == neighbors.end()){
+                            sub_nbrs[count_ngb] = j;
+                            count_ngb++;
+                        }
                         neighbors.insert(j);
-                        sub_nbrs[count_ngb] = j;
-                        count_ngb++;
                     }
                 }
                 // active_nodes.erase(cur_node);
@@ -178,8 +176,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
 
     int sending = M.size();
 
-    // MPI_Barrier(MPI_COMM_WORLD);
-
     // Gather info for recv_counts and displs, arguments for Gatherv
     int recv_counts[num_procs];
     MPI_Gather(&sending, 1, MPI_INT, recv_counts, 1, MPI_INT, 0, 
@@ -200,6 +196,11 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     sending = neighbors.size();
     MPI_Gather(&sending, 1, MPI_INT, recv_counts, 1, MPI_INT, 0, 
         MPI_COMM_WORLD);
+    if (rank == 0) {
+        std::cout << " neighbors recv counts: " << std::endl;
+        print_arr(recv_counts, num_procs);
+        std::cout << "$$$" << std::endl;
+    }
     for (int i = 1; i < num_procs; i++)
         displs[i] = displs[i-1] + recv_counts[i-1];
     
@@ -218,8 +219,18 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     if(rank == 0) {
         for (int i = 0; i < all_count_M; i++)
             M.insert(all_M[i]);
-        for (int i = 0; i < all_count_ngb; i++)
+
+        // Correct up until now
+        std::cout << "num of ngbs " << all_count_ngb << std::endl;
+        for (int i = 0; i < all_count_ngb; i++){
             neighbors.insert(all_nbrs[i]);
+            std::cout << "inserting" << all_nbrs[i] << std::endl;
+        }
+        std::cout << "-----Gathered neighbors'-------------" << std::endl;
+        for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
+            std::cout << *i << ' ';
+        std::cout << std::endl;
+        std::cout << "-------------------------------------" << std::endl;
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -238,6 +249,7 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     // MPI_Finalize();
 }
 
+// 2994 5229 6762 7897 4623 5080
 std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
     std::set<int> A, M, M_temp, neighbors;
@@ -260,6 +272,14 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     }
     
     std::vector<int> rand_vals;
+    // std::vector<int> rv_to_use;
+    // rv_to_use.push_back(2994);
+    // rv_to_use.push_back(5229);
+    // rv_to_use.push_back(6762);
+    // rv_to_use.push_back(7897);
+    // rv_to_use.push_back(4623);
+    // rv_to_use.push_back(5080);
+    // rand_vals = rv_to_use;
 
     //MPI_Init(NULL, NULL);
 
@@ -268,10 +288,7 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     bool root_done = 0;
     
     while (!root_done)
-    {
-        //rand_vals = (int*) malloc(sizeof(int) * A.size());
-        //rand_vals = assign_rand_vals(5);
-        
+    {   
         assign_rand_vals(rand_vals, num_nodes);
         M_temp.clear();
         neighbors.clear();
