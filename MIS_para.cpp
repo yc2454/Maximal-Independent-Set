@@ -82,7 +82,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     // For MPI_Scatterv
     int* send_counts = (int*)malloc(sizeof(int) * num_procs);
     int* displs = (int*)malloc(sizeof(int) * num_procs);
-    displs[0] = 0;
     
     // The node in consideration
     int cur_node;
@@ -101,13 +100,14 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
         else
         {
             send_counts[i] = i < num_alive ? 1 : 0;
-            displs[i] = i < num_alive ? (displs[i-1] + 1) : displs[i-1];
+            if (i == 0)
+                displs[i] = 0;
+            else
+                displs[i] = i < num_alive ? (displs[i-1] + 1) : displs[i-1];
         }
     }
 
-    std::cout << rank << " got here 0" << std::endl;
-
-    // printf("Alive: %d, Process: %d, send counts: \n", num_alive, num_procs);
+    // printf("Rank: %d, Alive: %d, Process: %d, send counts: \n", rank, num_alive, num_procs);
     // print_arr(send_counts, num_procs);
     // printf("displs: \n");
     // print_arr(displs, num_procs);
@@ -116,19 +116,16 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
 
     // Buffer to hold the nodes scattered to each process
     int *sub_alive = (int*) malloc(sizeof(int) * recving);
-    std::cout << "rank" << rank << ' ' << recving << " receiving " << std::endl;
+    // std::cout << "rank" << rank << ' ' << recving << " receiving " << std::endl;
     MPI_Scatterv(alive, send_counts, displs, 
         MPI_INT, sub_alive, recving, MPI_INT, 0, MPI_COMM_WORLD);
-    std::cout << rank << " got here 0.5" << std::endl;
     // MPI_Scatter(alive, nodes_per_proc, MPI_DOUBLE, sub_alive, nodes_per_proc, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     // std::cout << "rank" << rank << ' ' << sub_alive[0] << ' ' << sub_alive[1] << " sub" << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Buffer for nodes to add
     int* sub_M = (int*) malloc(sizeof(int) * recving);
-    std::cout << rank << " got here 0.75" << std::endl;
     int* sub_nbrs = (int*) malloc(sizeof(int) * num_nodes);
-    std::cout << rank << " got here 0.80" << std::endl;
     int count_M = 0;
     int count_ngb = 0;
 
@@ -162,8 +159,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
             }
         }
     
-    
-
     // Printing status
     for(std::vector<int>::const_iterator i = rand_vals.begin(); i != rand_vals.end(); i++)
             std::cout << *i << ' ';
@@ -183,28 +178,19 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
 
     int sending = M.size();
 
-    std::cout << rank << " got here 1" << std::endl;
-
     // MPI_Barrier(MPI_COMM_WORLD);
 
     // Gather info for recv_counts and displs, arguments for Gatherv
     int recv_counts[num_procs];
     MPI_Gather(&sending, 1, MPI_INT, recv_counts, 1, MPI_INT, 0, 
         MPI_COMM_WORLD);
-    if (rank == 0) {
-        std::cout << "receive counts for Gatherv:" << std::endl;
-        print_arr(recv_counts, num_procs);
-        printf("end\n");
-    }
     displs[0] = 0;
     for (int i = 1; i < num_procs; i++)
         displs[i] = displs[i-1] + recv_counts[i-1];
-    std::cout << rank << " got here 2" << std::endl;
     
     // Send M' in each process to root
     MPI_Gatherv(sub_M, sending, MPI_INT, all_M, 
         recv_counts, displs, MPI_INT, 0, MPI_COMM_WORLD);
-    std::cout << rank << " got here 3" << std::endl;
 
     // The neighbors of the nodes
     int* all_nbrs = NULL;
@@ -219,8 +205,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     
     MPI_Gatherv(sub_nbrs, sending, MPI_INT, all_nbrs, 
         recv_counts, displs, MPI_INT, 0, MPI_COMM_WORLD);
-    
-    std::cout << rank << " got here 4" << std::endl;
 
     // Sum up the size of data
     int all_count_M;
@@ -228,7 +212,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     MPI_Reduce(&count_M, &all_count_M, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&count_ngb, &all_count_ngb, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     // std::cout << "size of M' this round: " << all_count_M << std::endl;
-    std::cout << rank << " got here 5" << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 
     // Add gathered data into M and its neighbors
@@ -238,7 +221,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
         for (int i = 0; i < all_count_ngb; i++)
             neighbors.insert(all_nbrs[i]);
     }
-    std::cout << rank << " got here 6" << std::endl;
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -251,7 +233,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     }
     free(sub_nbrs);
     free(sub_M);
-    std::cout << rank << " got here 7" << std::endl;
     MPI_Barrier(MPI_COMM_WORLD);
 
     // MPI_Finalize();
