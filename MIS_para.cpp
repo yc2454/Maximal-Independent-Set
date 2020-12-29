@@ -5,7 +5,6 @@
 #include <iostream>
 #include <ctime>
 #include <cmath>
-//#define INDEX(x,y) (uint64_t)(x * num_nodes + y)
 
 void print_arr(int *array, int len) {
     for (int i = 0; i < len; i++)
@@ -14,41 +13,6 @@ void print_arr(int *array, int len) {
     }
     printf("\n");
 }
-
-// void assign_rand_val(int** nodes, int num_nodes, int num_proc){
-
-//     MPI_Init(NULL, NULL);
-
-//     int *mat_recv = (int*) malloc(sizeof(int) * num_nodes);
-//     // Send buffer of length 1
-//     int *send = (int*) malloc(sizeof(int));
-//     int rank;
-//     int size;
-
-//     // Get rank and size of this process
-//     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-//     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-//     srand(rank);
-
-//     // send stores a random value
-//     send[0] = rand();
-//     // printf("sending %d\n", send[0]);
-
-//     MPI_Allgather(send, 1, MPI_INT, mat_recv, 1, MPI_INT, MPI_COMM_WORLD);
-
-//     //printf("This is root and the values are assigned \n");
-//     free(*nodes);
-//     *nodes = (int*)malloc(5 * sizeof(int));
-//     *nodes = mat_recv;
-    
-//     free(send);
-//     //free(mat_recv);
-
-//     MPI_Barrier(MPI_COMM_WORLD);
-//     MPI_Finalize();
-
-// }
 
 void assign_rand_vals(std::vector<int> &rand_vals, int num_nodes){
     
@@ -225,7 +189,6 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
 
 }
 
-// 2994 5229 6762 7897 4623 5080
 std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
     std::set<int> A, M, M_temp, neighbors;
@@ -295,8 +258,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
             // std::cout << std::endl;
             // std::cout << "-------------------------------------" << std::endl;
         }
-
-        // MPI_Barrier(MPI_COMM_WORLD);
         
         // Broadcast whether A is empty in root process
         MPI_Bcast(&root_done, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
@@ -359,7 +320,7 @@ int main(int argc, char* argv[]){
     test[23] = 1;
     test[24] = 1;
 
-    for (int i = 30; i < 35; i++)
+    for (int i = 30; i < 36; i++)
         test[i] = 1;
     test[30] = 0;
     
