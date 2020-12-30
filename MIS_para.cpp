@@ -17,27 +17,50 @@ void print_arr(int *array, int len) {
 void assign_rand_vals(std::vector<int> &rand_vals, int num_nodes){
     
     for (int i = 0; i < num_nodes; i++)
-    {
         rand_vals.push_back(rand() % 10000);
-    }
     
 }
 
-void add_and_record(int rank, double* mat, std::vector<int> rand_vals, 
-                    int num_nodes, int num_procs, std::set<int> &neighbors, 
-                    std::set<int> &M, int* alive, int num_alive)
-{
+void assign_rv(int** rv, int num_nodes){
+
+    *rv = (int*) malloc(sizeof(int) * num_nodes);
+    for (int i = 0; i < num_nodes; i++)
+        (*rv)[i] = rand() % 10000;
     
+}
+
+void add_and_record(int rank, double* mat, int num_nodes, int num_procs, 
+                    std::set<int> &neighbors, std::set<int> &M, 
+                    int* alive, int num_alive)
+{
+    srand(time(NULL) + rank);
+
     bool flag = 1;
 
     // Number of nodes the first (num_procs - 1) should hold
     int nodes_per_proc = (num_alive >= num_procs) ? round((1.0 * num_alive) / num_procs) : 1;
+    // Number of randoms values the first (num_procs - 1) should calculate 
+    int rv_per_proc = (num_nodes >= num_procs) ? round((1.0 * num_alive) / num_procs) : 1;
     // Number of nodes the last process should hold
     int nodes_left = num_alive - nodes_per_proc * (num_procs - 1);
+    int rv_left = num_nodes - rv_per_proc * (num_procs - 1);
 
     // For MPI_Scatterv
     int* send_counts = (int*)malloc(sizeof(int) * num_procs);
     int* displs = (int*)malloc(sizeof(int) * num_procs);
+
+    // For MPI_Allgatherv
+    int* r_c_rv = (int*)malloc(sizeof(int) * num_procs);
+    int* displs_rv = (int*)malloc(sizeof(int) * num_procs);
+    for (int i = 0; i < num_procs; i++)
+    {
+        if (i < num_procs - 1)
+            r_c_rv[i] = rv_per_proc;
+        else
+            r_c_rv[i] = rv_left;
+        displs_rv[i] = i * rv_per_proc;
+    }
+    
     
     // The node in consideration
     int cur_node;
@@ -70,8 +93,14 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
     // std::cout << "rank" << rank << ' ' << recving << " receiving " << std::endl;
     MPI_Scatterv(alive, send_counts, displs, 
         MPI_INT, sub_alive, recving, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int* rand_vals = (int*) malloc(sizeof(int) * num_nodes);
+    int* sub_rv = (int*) malloc(sizeof(int) * recving);
     
-    // MPI_Barrier(MPI_COMM_WORLD);
+    assign_rv(&sub_rv, r_c_rv[rank]);
+
+    MPI_Allgatherv(sub_rv, r_c_rv[rank], MPI_INT, rand_vals, 
+        r_c_rv, displs_rv, MPI_INT, MPI_COMM_WORLD);
 
     // Buffer for nodes to add
     int* sub_M = (int*) malloc(sizeof(int) * recving);
@@ -112,12 +141,10 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
         }
     
     // Printing status
-    for(std::vector<int>::const_iterator i = rand_vals.begin(); i != rand_vals.end(); i++)
-            std::cout << *i << ' ';
-    std::cout << ' ' << rank << std::endl;
+    print_arr(rand_vals, num_nodes);
     for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
         std::cout << *i << ' ';
-    std::cout << "*" << std::endl;
+    std::cout << " *" << std::endl;
     for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
         std::cout << *i << ' ';
     std::cout << "*" << std::endl;
@@ -215,12 +242,12 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     
     while (!root_done)
     {   
-        assign_rand_vals(rand_vals, num_nodes);
+        // assign_rand_vals(rand_vals, num_nodes);
         M_temp.clear();
         neighbors.clear();
 
         // Add fitting nodes to M'
-        add_and_record(rank, mat, rand_vals, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
+        add_and_record(rank, mat, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
 
         // M = union(M, M')
         M.insert(M_temp.begin(), M_temp.end());
@@ -286,7 +313,7 @@ int main(int argc, char* argv[]){
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     
-    srand((unsigned) time(0));
+    // srand((unsigned) time(0));
     
     double *test;
     test = new double [49];
