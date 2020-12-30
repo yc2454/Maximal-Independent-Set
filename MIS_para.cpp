@@ -138,14 +138,15 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
             }
         }
     
-    // Printing status
-    print_arr(rand_vals, num_nodes);
-    for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
-        std::cout << *i << ' ';
-    std::cout << "*" << std::endl;
-    for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
-        std::cout << *i << ' ';
-    std::cout << "*" << std::endl;
+    //Printing status
+    // std::cout << "rank " << rank << std::endl;
+    // print_arr(rand_vals, num_nodes);
+    // for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
+    //     std::cout << *i << ' ';
+    // std::cout << "*" << std::endl;
+    // for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
+    //     std::cout << *i << ' ';
+    // std::cout << "*" << std::endl;
     // MPI_Barrier(MPI_COMM_WORLD);
 
     // Buffer for the nodes to add
@@ -217,7 +218,7 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
 
 std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
-    std::set<int> A, M, M_temp, neighbors;
+    std::set<int> nodes_remain, A, M, M_temp, neighbors;
 
     int rank;
 
@@ -225,68 +226,110 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     for (int i = 0; i < num_nodes; i++)
-        A.insert(i);
-
-    // Translate the set into an array
-    int* alive;
-    int idx = 0;
-    int num_alive = A.size();
-    translate(A, &alive);
-
-    bool root_done = 0;
+        nodes_remain.insert(i);
     
-    while (!root_done)
-    {   
-        // assign_rand_vals(rand_vals, num_nodes);
-        M_temp.clear();
-        neighbors.clear();
+    // Translate the sets into arrays
+    int* rem;
+    int num_rem = nodes_remain.size();
+    translate(nodes_remain, &rem);
 
-        // Add fitting nodes to M'
-        add_and_record(rank, mat, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
+    int* alive;
+    int num_alive;
 
-        // M = union(M, M')
-        M.insert(M_temp.begin(), M_temp.end());
+    bool root_done;
+    bool all_done = 0;
+    // int count = 0;
+    
+    while (!all_done) {
 
-        // MPI_Barrier(MPI_COMM_WORLD);
+        A = nodes_remain;
+        num_alive = A.size();
+        translate(A, &alive);
 
-        if (rank == 0)
-        {
-            // Delete M' and neighbors from A in root process
-            for(std::set<int>::const_iterator i = M_temp.begin(); i != M_temp.end(); i++)
-                A.erase(*i);
-            for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
-                A.erase(*i);
-            root_done = A.empty();
+        root_done = 0;
 
-            // New translate of alive nodes
-            idx = 0;
-            num_alive = A.size();
+        // if (rank == 0)
+        //     std::cout << "Round: " << count << std::endl;
 
-            // free(alive);
-            translate(A, &alive);
+        while (!root_done)
+        {   
+            // assign_rand_vals(rand_vals, num_nodes);
+            M_temp.clear();
+            neighbors.clear();
 
-            // Printing
-            // std::cout << "-----active nodes in this round------" << std::endl;
-            // for(std::set<int>::const_iterator i = A.begin(); i != A.end(); i++)
-            //     std::cout << *i << ' ';
-            // std::cout << std::endl;
-            // std::cout << "-------------------------------------" << std::endl;
+            // Add fitting nodes to M'
+            add_and_record(rank, mat, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
+
+            MPI_Barrier(MPI_COMM_WORLD);
+
+            // M = union(M, M')
+            M.insert(M_temp.begin(), M_temp.end());
+
+            if (rank == 0)
+            {
+                // Delete M' and neighbors from A in root process
+                for(std::set<int>::const_iterator i = M_temp.begin(); i != M_temp.end(); i++)
+                    A.erase(*i);
+                for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
+                    A.erase(*i);
+                root_done = A.empty();
+
+                // New translate of alive nodes
+                num_alive = A.size();
+                translate(A, &alive);
+
+            }
+            
+            // Broadcast whether A is empty in root process
+            MPI_Bcast(&root_done, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
+
+            // Broadcast the new set of active nodes to each process
+            MPI_Bcast(&num_alive, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+            MPI_Bcast(alive, num_alive, MPI_INT, 0, MPI_COMM_WORLD);
+
+            MPI_Barrier(MPI_COMM_WORLD);
         }
+
+        A.clear();
+        if (rank == 0) {
+
+            for (std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
+                nodes_remain.erase(*i);
+
+            std::cout << "-----generated set in this round-----" << std::endl;
+            for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
+                std::cout << *i << ' ';
+            std::cout << std::endl;
+            std::cout << "-------------------------------------" << std::endl;
+
+            all_done = nodes_remain.empty();
+            num_rem = nodes_remain.size();
+            translate(nodes_remain, &rem);
+        }
+
+        M.clear();
+
+        // Broadcast whether there is any nodes left in root process
+        MPI_Bcast(&all_done, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
+
+        // Broadcast the new set of remaining nodes to each process
+        MPI_Bcast(&num_rem, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(rem, num_rem, MPI_INT, 0, MPI_COMM_WORLD);
+        nodes_remain.clear();
+        for (int i = 0; i < num_rem; i++)
+            nodes_remain.insert(rem[i]);
+
+        // count++;
+
+        // if (count > 5) {
+        //     break;
+        // }
         
-        // Broadcast whether A is empty in root process
-        MPI_Bcast(&root_done, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
-
-        // Broadcast the new set of active nodes to each process
-        MPI_Bcast(&num_alive, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        
-        // MPI_Barrier(MPI_COMM_WORLD);
-
-        MPI_Bcast(alive, num_alive, MPI_INT, 0, MPI_COMM_WORLD);
-
-        MPI_Barrier(MPI_COMM_WORLD);
     }
 
-
+    free(alive);
+    free(rem);
     return M;
 
 }
@@ -346,6 +389,28 @@ int main(int argc, char* argv[]){
     if (!I.empty() && rank == 0)
         for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
             std::cout << *i << ' ';
+    // time_t start, end;
+
+    // time(&start);
+    // std::set<int> I;
+    // for (int i = 0; i < 1000000; i++)
+    // {
+    //     I.insert(i);
+    // }
+    // time(&end);
+    // double time_taken = double(end - start);
+    // std::cout << "Time taken by inserting is : " << std::fixed 
+    //      << time_taken; 
+    // std::cout << " sec " << std::endl;
+
+    // time(&start);
+    // std::set<int> J;
+    // J = I;
+    // time(&end);
+    // time_taken = double(end - start);
+    // std::cout << "Time taken by copying is : " << std::fixed 
+    //      << time_taken; 
+    // std::cout << " sec " << std::endl;
 
     MPI_Finalize();
 
