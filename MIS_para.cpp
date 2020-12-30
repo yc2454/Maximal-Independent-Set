@@ -22,6 +22,35 @@ void assign_rv(int** rv, int num_nodes){
     
 }
 
+void divide_and_send(int num, int num_procs, int** counts, int ** displs) {
+
+    int per = (num >= num_procs) ? round((1.0 * num) / num_procs) : 1;
+    int left = num - per * (num_procs - 1);
+
+    (*counts) = (int*)malloc(sizeof(int) * num);
+    (*displs) = (int*)malloc(sizeof(int) * num);
+
+    for (int i = 0; i < num_procs; i++)
+    {
+        if (num >= num_procs) {
+            if (i < num_procs - 1)
+                (*counts)[i] = per;
+            else
+                (*counts)[i] = left;
+            (*displs)[i] = i * per;
+        }
+        else {
+            (*counts)[i] = i < num ? 1 : 0;
+            if (i == 0)
+                (*displs)[i] = 0;
+            else
+                (*displs)[i] = i < num ? ((*displs)[i-1] + 1) : (*displs)[i-1];
+        }
+        
+    }
+
+}
+
 void add_and_record(int rank, double* mat, int num_nodes, int num_procs, 
                     std::set<int> &neighbors, std::set<int> &M, 
                     int* alive, int num_alive)
@@ -29,54 +58,18 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
 
     bool flag = 1;
 
-    // Number of nodes the first (num_procs - 1) should hold
-    int nodes_per_proc = (num_alive >= num_procs) ? round((1.0 * num_alive) / num_procs) : 1;
-    // Number of randoms values the first (num_procs - 1) should calculate 
-    int rv_per_proc = (num_nodes >= num_procs) ? round((1.0 * num_alive) / num_procs) : 1;
-    // Number of nodes the last process should hold
-    int nodes_left = num_alive - nodes_per_proc * (num_procs - 1);
-    int rv_left = num_nodes - rv_per_proc * (num_procs - 1);
-
     // For MPI_Scatterv
-    int* send_counts = (int*)malloc(sizeof(int) * num_procs);
-    int* displs = (int*)malloc(sizeof(int) * num_procs);
+    int* send_counts;
+    int* displs;
+    divide_and_send(num_alive, num_procs, &send_counts, &displs);
 
     // For MPI_Allgatherv
-    int* r_c_rv = (int*)malloc(sizeof(int) * num_procs);
-    int* displs_rv = (int*)malloc(sizeof(int) * num_procs);
-    for (int i = 0; i < num_procs; i++)
-    {
-        if (i < num_procs - 1)
-            r_c_rv[i] = rv_per_proc;
-        else
-            r_c_rv[i] = rv_left;
-        displs_rv[i] = i * rv_per_proc;
-    }
-    
-    
+    int* r_c_rv;
+    int* displs_rv;
+    divide_and_send(num_nodes, num_procs, &r_c_rv, &displs_rv);
+
     // The node in consideration
     int cur_node;
-
-    // Compute send_counts and displacements
-    for (int i = 0; i < num_procs; i++)
-    {
-        if (num_alive >= num_procs)
-        {
-            if (i < num_procs - 1)
-                send_counts[i] = nodes_per_proc;
-            else
-                send_counts[i] = nodes_left;
-            displs[i] = i * nodes_per_proc;
-        }
-        else
-        {
-            send_counts[i] = i < num_alive ? 1 : 0;
-            if (i == 0)
-                displs[i] = 0;
-            else
-                displs[i] = i < num_alive ? (displs[i-1] + 1) : displs[i-1];
-        }
-    }
     
     int recving = (send_counts[rank] < 0 || rank >= num_procs) ? 0 : send_counts[rank];
 
