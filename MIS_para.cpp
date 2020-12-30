@@ -334,7 +334,7 @@ int main(int argc, char* argv[]){
         test[i] = 1;
     test[30] = 0;
     
-
+    
     std::set<int> I = MIS(test, 6, size);
 
     if (!I.empty() && rank == 0)
