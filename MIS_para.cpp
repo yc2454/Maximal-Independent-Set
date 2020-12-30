@@ -22,6 +22,19 @@ void assign_rv(int** rv, int num_nodes){
     
 }
 
+// Translate the elements in a set into an array
+void translate(std::set<int> A, int** arr) {
+
+    *arr = (int*) malloc(sizeof(int) * A.size());
+    int idx = 0;
+
+    for(std::set<int>::const_iterator a = A.begin(); a != A.end(); a++){
+        (*arr)[idx] = *a;
+        idx++;
+    }
+
+}
+
 void divide_and_send(int num, int num_procs, int** counts, int ** displs) {
 
     int per = (num >= num_procs) ? round((1.0 * num) / num_procs) : 1;
@@ -215,13 +228,10 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         A.insert(i);
 
     // Translate the set into an array
-    int* alive = (int*) malloc(sizeof(int) * A.size());
+    int* alive;
     int idx = 0;
     int num_alive = A.size();
-    for(std::set<int>::const_iterator a = A.begin(); a != A.end(); a++){
-        alive[idx] = *a;
-        idx++;
-    }
+    translate(A, &alive);
 
     bool root_done = 0;
     
@@ -253,11 +263,7 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
             num_alive = A.size();
 
             // free(alive);
-            alive = (int*) malloc(sizeof(int) * A.size());
-            for(std::set<int>::const_iterator a = A.begin(); a != A.end(); a++){
-                alive[idx] = *a;
-                idx++;
-            }
+            translate(A, &alive);
 
             // Printing
             // std::cout << "-----active nodes in this round------" << std::endl;
@@ -334,7 +340,7 @@ int main(int argc, char* argv[]){
         test[i] = 1;
     test[30] = 0;
     
-    
+
     std::set<int> I = MIS(test, 6, size);
 
     if (!I.empty() && rank == 0)
