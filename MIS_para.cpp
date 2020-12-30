@@ -14,18 +14,11 @@ void print_arr(int *array, int len) {
     printf("\n");
 }
 
-void assign_rand_vals(std::vector<int> &rand_vals, int num_nodes){
-    
-    for (int i = 0; i < num_nodes; i++)
-        rand_vals.push_back(rand() % 10000);
-    
-}
-
 void assign_rv(int** rv, int num_nodes){
 
     *rv = (int*) malloc(sizeof(int) * num_nodes);
     for (int i = 0; i < num_nodes; i++)
-        (*rv)[i] = rand() % 10000;
+        (*rv)[i] = rand();
     
 }
 
@@ -209,6 +202,8 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     }
     free(sub_nbrs);
     free(sub_M);
+    free(sub_rv);
+    free(rand_vals);
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -234,8 +229,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         alive[idx] = *a;
         idx++;
     }
-    
-    std::vector<int> rand_vals;
 
     bool root_done = 0;
     
@@ -250,9 +243,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
         // M = union(M, M')
         M.insert(M_temp.begin(), M_temp.end());
-        
-        // Reset random values
-        rand_vals.clear();
 
         // MPI_Barrier(MPI_COMM_WORLD);
 
