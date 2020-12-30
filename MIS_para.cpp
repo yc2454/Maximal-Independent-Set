@@ -25,8 +25,7 @@ void assign_rand_vals(std::vector<int> &rand_vals, int num_nodes){
 
 void add_and_record(int rank, double* mat, std::vector<int> rand_vals, 
                     int num_nodes, int num_procs, std::set<int> &neighbors, 
-                    std::set<int> &M, int* alive, int num_alive, 
-                    std::set<int> &A)
+                    std::set<int> &M, int* alive, int num_alive)
 {
     
     bool flag = 1;
@@ -96,8 +95,8 @@ void add_and_record(int rank, double* mat, std::vector<int> rand_vals,
                 for (int j = 0; j < num_nodes; j++)
                 {
                     // Delete the neighbors of the current node
-                    if(mat[cur_node * num_nodes + j] > 0 && 
-                        (A.find(j) != A.end())) {
+                    if(mat[cur_node * num_nodes + j] > 0 
+                        /*(A.find(j) != A.end())*/) {
                         if (neighbors.find(j) == neighbors.end()){
                             sub_nbrs[count_ngb] = j;
                             count_ngb++;
@@ -221,7 +220,7 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         neighbors.clear();
 
         // Add fitting nodes to M'
-        add_and_record(rank, mat, rand_vals, num_nodes, num_procs, neighbors, M_temp, alive, num_alive, A);
+        add_and_record(rank, mat, rand_vals, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
 
         // M = union(M, M')
         M.insert(M_temp.begin(), M_temp.end());
