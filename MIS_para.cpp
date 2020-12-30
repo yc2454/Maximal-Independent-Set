@@ -33,7 +33,6 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
                     std::set<int> &neighbors, std::set<int> &M, 
                     int* alive, int num_alive)
 {
-    srand(time(NULL) + rank);
 
     bool flag = 1;
 
@@ -144,7 +143,7 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     print_arr(rand_vals, num_nodes);
     for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
         std::cout << *i << ' ';
-    std::cout << " *" << std::endl;
+    std::cout << "*" << std::endl;
     for(std::set<int>::const_iterator i = neighbors.begin(); i != neighbors.end(); i++)
         std::cout << *i << ' ';
     std::cout << "*" << std::endl;
@@ -312,6 +311,8 @@ int main(int argc, char* argv[]){
     // Get rank and size of this process
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    srand(time(NULL) + rank);
     
     // srand((unsigned) time(0));
     
