@@ -238,14 +238,17 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
     bool root_done;
     bool all_done = 0;
-    // int count = 0;
+    int count = 0;
     
-    while (!all_done) {
+    while (!all_done) { 
 
-        A = nodes_remain;
-        num_alive = A.size();
-        translate(A, &alive);
-
+        num_alive = num_rem;
+        alive = (int*) malloc(sizeof(int) * num_rem);
+        alive = rem;
+        A.clear();
+        for (int i = 0; i < num_alive; i++)
+            A.insert(alive[i]);
+        
         root_done = 0;
 
         // if (rank == 0)
@@ -291,7 +294,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
             MPI_Barrier(MPI_COMM_WORLD);
         }
 
-        A.clear();
         if (rank == 0) {
 
             for (std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
@@ -306,20 +308,21 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
             all_done = nodes_remain.empty();
             num_rem = nodes_remain.size();
             translate(nodes_remain, &rem);
+            
         }
 
         M.clear();
 
         // Broadcast whether there is any nodes left in root process
         MPI_Bcast(&all_done, 1, MPI_CXX_BOOL, 0, MPI_COMM_WORLD);
-
         // Broadcast the new set of remaining nodes to each process
         MPI_Bcast(&num_rem, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Bcast(rem, num_rem, MPI_INT, 0, MPI_COMM_WORLD);
-        nodes_remain.clear();
-        for (int i = 0; i < num_rem; i++)
-            nodes_remain.insert(rem[i]);
+        // nodes_remain.clear();
+        // for (int i = 0; i < num_rem; i++)
+        //     nodes_remain.insert(rem[i]);
 
+        MPI_Barrier(MPI_COMM_WORLD);
         // count++;
 
         // if (count > 5) {
@@ -329,7 +332,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     }
 
     free(alive);
-    free(rem);
     return M;
 
 }
@@ -389,28 +391,6 @@ int main(int argc, char* argv[]){
     if (!I.empty() && rank == 0)
         for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
             std::cout << *i << ' ';
-    // time_t start, end;
-
-    // time(&start);
-    // std::set<int> I;
-    // for (int i = 0; i < 1000000; i++)
-    // {
-    //     I.insert(i);
-    // }
-    // time(&end);
-    // double time_taken = double(end - start);
-    // std::cout << "Time taken by inserting is : " << std::fixed 
-    //      << time_taken; 
-    // std::cout << " sec " << std::endl;
-
-    // time(&start);
-    // std::set<int> J;
-    // J = I;
-    // time(&end);
-    // time_taken = double(end - start);
-    // std::cout << "Time taken by copying is : " << std::fixed 
-    //      << time_taken; 
-    // std::cout << " sec " << std::endl;
 
     MPI_Finalize();
 
