@@ -5,6 +5,7 @@
 #include <iostream>
 #include <ctime>
 #include <cmath>
+#include <pthread.h>
 
 void print_arr(int *array, int len) {
     for (int i = 0; i < len; i++)
@@ -336,6 +337,13 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
 
 }
 
+struct MIS_para
+{
+    double* mat;
+    int num_nodes;
+    int num_procs;
+};
+
 int main(int argc, char* argv[]){
 
     MPI_Init(NULL, NULL);
@@ -351,7 +359,7 @@ int main(int argc, char* argv[]){
     // srand((unsigned) time(0));
     
     double *test;
-    test = new double [49];
+    test = new double [36];
 
     for (int i = 0; i < 6; i++)
         test[i*6 + i] = 0;
@@ -384,6 +392,19 @@ int main(int argc, char* argv[]){
     for (int i = 30; i < 36; i++)
         test[i] = 1;
     test[30] = 0;
+    
+    double* test1 = new double[12]; 
+    double* test2 = new double[12];
+    double* test3 = new double[12];
+    for (int i = 0; i < 36; i++)
+    {
+        if (i < 12) 
+            test1[i] = test[i];
+        else if (i < 24)
+            test2[i - 12] = test[i];
+        else
+            test3[i - 24] = test[i];
+    }
     
 
     std::set<int> I = MIS(test, 6, size);
