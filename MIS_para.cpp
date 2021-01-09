@@ -6,11 +6,20 @@
 #include <ctime>
 #include <cmath>
 #include <pthread.h>
+#include <utility>
 
 void print_arr(int *array, int len) {
     for (int i = 0; i < len; i++)
     {
         printf("%d ", array[i]);
+    }
+    printf("\n");
+}
+
+void print_arr_d(double *array, int len) {
+    for (int i = 0; i < len; i++)
+    {
+        printf("%f ", array[i]);
     }
     printf("\n");
 }
@@ -67,9 +76,14 @@ void divide_and_send(int num, int num_procs, int** counts, int ** displs) {
 
 void add_and_record(int rank, double* mat, int num_nodes, int num_procs, 
                     std::set<int> &neighbors, std::set<int> &M, 
-                    int* alive, int num_alive)
+                    int* alive, int num_alive, int nodes_per_proc)
 {
-
+    // range records the range of the nodes contained in this server
+    std::pair<int, int> range;
+    range.first = rank * nodes_per_proc;
+    range.second = rank == num_procs - 1 ? num_nodes : (rank + 1) * nodes_per_proc;
+    
+    // This variable will be used in Luby's Algo
     bool flag = 1;
 
     // For MPI_Scatterv
@@ -84,6 +98,8 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
 
     // The node in consideration
     int cur_node;
+    // The rank of the cur_node
+    int cur_node_rank;
     
     int recving = (send_counts[rank] < 0 || rank >= num_procs) ? 0 : send_counts[rank];
 
@@ -107,11 +123,16 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     int count_M = 0;
     int count_ngb = 0;
 
+    // Buffer to hold matrix sent from other process
+    double temp_mat[nodes_per_proc];
+
     // Luby's Algo
     if (recving > 0)
         for (int i = 0; i < send_counts[rank]; i++)
         {
             cur_node = sub_alive[i];
+            cur_node_rank = cur_node / nodes_per_proc;
+
             //check whether node i has bigger random value than all its neighbors
             for (int j = 0; j < num_nodes; j++)
             {
@@ -217,7 +238,22 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
 
 }
 
-std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
+struct MIS_para
+{
+    double* mat;
+    int num_nodes;
+    int num_procs;
+    int nodes_per_proc;
+};
+
+std::set<int> MIS(void *args) {
+
+    struct MIS_para *pstru;
+    pstru = (struct MIS_para *) args;
+    int num_nodes = pstru->num_nodes;
+    int num_procs = pstru->num_procs;
+    double* mat = pstru->mat;
+    int nodes_per_proc = pstru->nodes_per_proc;
 
     std::set<int> nodes_remain, A, M, M_temp, neighbors;
 
@@ -252,17 +288,14 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
         
         root_done = 0;
 
-        // if (rank == 0)
-        //     std::cout << "Round: " << count << std::endl;
-
         while (!root_done)
         {   
-            // assign_rand_vals(rand_vals, num_nodes);
             M_temp.clear();
             neighbors.clear();
 
             // Add fitting nodes to M'
-            add_and_record(rank, mat, num_nodes, num_procs, neighbors, M_temp, alive, num_alive);
+            add_and_record(rank, mat, num_nodes, num_procs,
+                neighbors, M_temp, alive, num_alive, nodes_per_proc);
 
             MPI_Barrier(MPI_COMM_WORLD);
 
@@ -281,6 +314,8 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
                 // New translate of alive nodes
                 num_alive = A.size();
                 translate(A, &alive);
+                // printf("The alive array at this round: \n");
+                // print_arr(alive, num_alive);
 
             }
             
@@ -336,13 +371,6 @@ std::set<int> MIS(double* mat, int num_nodes, int num_procs) {
     return M;
 
 }
-
-struct MIS_para
-{
-    double* mat;
-    int num_nodes;
-    int num_procs;
-};
 
 int main(int argc, char* argv[]){
 
@@ -405,9 +433,13 @@ int main(int argc, char* argv[]){
         else
             test3[i - 24] = test[i];
     }
-    
+    struct MIS_para args;
+    args.mat = test;
+    args.num_nodes = 6;
+    args.num_procs = size;
+    args.nodes_per_proc = round((1.0 * 6) / size);
 
-    std::set<int> I = MIS(test, 6, size);
+    std::set<int> I = MIS(&args);
 
     if (!I.empty() && rank == 0)
         for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
