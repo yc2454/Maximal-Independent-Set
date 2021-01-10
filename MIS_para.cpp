@@ -79,9 +79,9 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
                     int* alive, int num_alive, int nodes_per_proc)
 {
     // range records the range of the nodes contained in this server
-    std::pair<int, int> range;
-    range.first = rank * nodes_per_proc;
-    range.second = rank == num_procs - 1 ? num_nodes : (rank + 1) * nodes_per_proc;
+    // std::pair<int, int> range;
+    // range.first = rank * nodes_per_proc;
+    // range.second = rank == num_procs - 1 ? num_nodes : (rank + 1) * nodes_per_proc;
     
     // This variable will be used in Luby's Algo
     bool flag = 1;
@@ -100,14 +100,16 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     int cur_node;
     // The rank of the cur_node
     int cur_node_rank;
+    // The index of cur_node in mat
+    int cur_node_idx;
     
     int recving = (send_counts[rank] < 0 || rank >= num_procs) ? 0 : send_counts[rank];
 
     // Buffer to hold the nodes scattered to each process
-    int *sub_alive = (int*) malloc(sizeof(int) * recving);
+    // int *sub_alive = (int*) malloc(sizeof(int) * recving);
     // std::cout << "rank" << rank << ' ' << recving << " receiving " << std::endl;
-    MPI_Scatterv(alive, send_counts, displs, 
-        MPI_INT, sub_alive, recving, MPI_INT, 0, MPI_COMM_WORLD);
+    // MPI_Scatterv(alive, send_counts, displs, 
+    //     MPI_INT, sub_alive, recving, MPI_INT, 0, MPI_COMM_WORLD);
 
     int* rand_vals = (int*) malloc(sizeof(int) * num_nodes);
     int* sub_rv = (int*) malloc(sizeof(int) * recving);
@@ -123,20 +125,23 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     int count_M = 0;
     int count_ngb = 0;
 
-    // Buffer to hold matrix sent from other process
-    double temp_mat[nodes_per_proc];
-
     // Luby's Algo
-    if (recving > 0)
-        for (int i = 0; i < send_counts[rank]; i++)
-        {
-            cur_node = sub_alive[i];
-            cur_node_rank = cur_node / nodes_per_proc;
+    // if (recving > 0)
+    for (int i = 0; i < num_alive; i++)
+    {
+        cur_node = alive[i];
+        cur_node_rank = cur_node / nodes_per_proc;
+        cur_node_idx = cur_node - (cur_node_rank * nodes_per_proc);
 
+        // When the mat in the current rank doesn't have cur_node,
+        // we can do nothing
+        if (cur_node_rank != rank)
+            continue;
+        else {
             //check whether node i has bigger random value than all its neighbors
             for (int j = 0; j < num_nodes; j++)
             {
-                if (rand_vals[cur_node] < rand_vals[j] && mat[cur_node * num_nodes + j] > 0)
+                if (rand_vals[cur_node] < rand_vals[j] && mat[cur_node_idx * num_nodes + j] > 0)
                     flag = 0;
             }
             //if it does, add i to M'
@@ -144,7 +149,7 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
                 for (int j = 0; j < num_nodes; j++)
                 {
                     // Delete the neighbors of the current node
-                    if(mat[cur_node * num_nodes + j] > 0 
+                    if(mat[cur_node_idx * num_nodes + j] > 0 
                         /*(A.find(j) != A.end())*/) {
                         if (neighbors.find(j) == neighbors.end()){
                             sub_nbrs[count_ngb] = j;
@@ -159,6 +164,7 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
                 count_M++;
             }
         }
+    }
     
     //Printing status
     // std::cout << "rank " << rank << std::endl;
@@ -222,7 +228,7 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
 
     // MPI_Barrier(MPI_COMM_WORLD);
 
-    free(sub_alive);
+    // free(sub_alive);
     free(send_counts);
     free(displs);
     if (rank == 0){
@@ -246,7 +252,7 @@ struct MIS_para
     int nodes_per_proc;
 };
 
-std::set<int> MIS(void *args) {
+void MIS(void *args) {
 
     struct MIS_para *pstru;
     pstru = (struct MIS_para *) args;
@@ -368,7 +374,7 @@ std::set<int> MIS(void *args) {
     }
 
     free(alive);
-    return M;
+    // return M;
 
 }
 
@@ -433,18 +439,27 @@ int main(int argc, char* argv[]){
         else
             test3[i - 24] = test[i];
     }
-    struct MIS_para args;
-    args.mat = test;
-    args.num_nodes = 6;
-    args.num_procs = size;
-    args.nodes_per_proc = round((1.0 * 6) / size);
 
-    std::set<int> I = MIS(&args);
+    std::vector<double*> tests;
+    tests.push_back(test1);
+    tests.push_back(test2);
+    tests.push_back(test3);
+    
+    int npp = round((1.0 * 6) / size);
 
-    if (!I.empty() && rank == 0)
-        for(std::set<int>::const_iterator i = I.begin(); i != I.end(); i++)
-            std::cout << *i << ' ';
+    std::vector<MIS_para> args;
+    MIS_para arg;
+    for (int i = 0; i < 3; i++)
+    {
+        arg.mat = tests[i];
+        arg.num_nodes = 6;
+        arg.num_procs = size;
+        arg.nodes_per_proc = npp;
+        args.push_back(arg);
+    }
 
+    MIS(&args[rank]);
+    
     MPI_Finalize();
 
 }
