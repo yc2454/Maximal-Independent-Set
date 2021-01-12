@@ -5,6 +5,7 @@
 #include <iostream>
 #include <ctime>
 #include <cmath>
+#include <unistd.h>
 #include <pthread.h>
 #include <utility>
 
@@ -78,8 +79,6 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
                     std::set<int> &neighbors, std::set<int> &M, 
                     int* alive, int num_alive, int nodes_per_proc)
 {
-    // printf("num_node: %d, num_procs: %d, nodes_per_proc: %d\n", num_nodes, num_procs, nodes_per_proc);
-    
     // This variable will be used in Luby's Algo
     bool flag = 1;
 
@@ -213,8 +212,6 @@ void add_and_record(int rank, double* mat, int num_nodes, int num_procs,
     MPI_Reduce(&count_M, &all_count_M, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Reduce(&count_ngb, &all_count_ngb, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    // MPI_Barrier(MPI_COMM_WORLD);
-
     // Add gathered data into M and its neighbors
     if(rank == 0) {
         for (int i = 0; i < all_count_M; i++)
@@ -279,11 +276,12 @@ void *MIS(void *args) {
 
     // This variable indicates whether we have found ALL MIS
     bool all_done = 0;
-    // int count = 0;
 
     // message buffer to send back to parent thread
     int* message;
     int msg_size;
+    int msg_count = 0;
+    // bool msg_sent = true;
     
     while (!all_done) { 
 
@@ -343,15 +341,17 @@ void *MIS(void *args) {
             for (std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
                 nodes_remain.erase(*i);
 
-            // std::cout << "-----generated set in this round-----" << std::endl;
-            // for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
-            //     std::cout << *i << ' ';
-            // std::cout << std::endl;
-            // std::cout << "-------------------------------------" << std::endl;
+            std::cout << "-----generated set in this round-----" << std::endl;
+            for(std::set<int>::const_iterator i = M.begin(); i != M.end(); i++)
+                std::cout << *i << ' ';
+            std::cout << std::endl;
+            std::cout << "-------------------------------------" << std::endl;
+            msg_count++;
 
             translate(M, &message);
             msg_size = M.size();
             for (int i = 0; i < num_procs; i++) {
+                // MPI_Send(&msg_sent, 1, MPI_CXX_BOOL, i, 0, MPI_COMM_WORLD);
                 MPI_Send(message, msg_size, MPI_INT, i, 0, MPI_COMM_WORLD);
                 MPI_Send(&msg_size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
             }
@@ -361,6 +361,12 @@ void *MIS(void *args) {
             translate(nodes_remain, &rem);
             
         }
+        
+        if (rank == 0) {
+        // msg_sent = false;
+        for (int i = 0; i < num_procs; i++) 
+            MPI_Send(&msg_count, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
+        }
 
         M.clear();
 
@@ -369,17 +375,8 @@ void *MIS(void *args) {
         // Broadcast the new set of remaining nodes to each process
         MPI_Bcast(&num_rem, 1, MPI_INT, 0, MPI_COMM_WORLD);
         MPI_Bcast(rem, num_rem, MPI_INT, 0, MPI_COMM_WORLD);
-        // nodes_remain.clear();
-        // for (int i = 0; i < num_rem; i++)
-        //     nodes_remain.insert(rem[i]);
 
         MPI_Barrier(MPI_COMM_WORLD);
-        // count++;
-
-        // if (count > 5) {
-        //     break;
-        // }
-        
     }
 
     free(alive);
@@ -390,7 +387,13 @@ void *MIS(void *args) {
 
 int main(int argc, char* argv[]){
 
-    MPI_Init(NULL, NULL);
+    // MPI_Init(NULL, NULL);
+    int provided;
+
+    MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
+    if (provided != MPI_THREAD_MULTIPLE) {
+        fprintf(stderr, "Warning MPI did not provide MPI_THREAD_MULTIPLE\n");
+    }
 
     int rank, size;
 
@@ -399,8 +402,6 @@ int main(int argc, char* argv[]){
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     srand(time(NULL) + rank);
-    
-    // srand((unsigned) time(0));
     
     double *test;
     test = new double [36];
@@ -473,18 +474,26 @@ int main(int argc, char* argv[]){
     err = pthread_create(&ntid, NULL, &MIS, &(args[rank]));
     if (err != 0)
         printf("can't create thread: %s\n", strerror(err));
-    // MIS(&args[rank]);
-
-    pthread_join(ntid, NULL);
-
-    int* msg = (int*) malloc(sizeof(int) * 6);
-    int msg_size;
-    
-    MPI_Recv(msg, 6, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    MPI_Recv(&msg_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    print_arr(msg, msg_size);
 
     // pthread_join(ntid, NULL);
+    int num_nodes = 6;
+    int* msg = (int*) malloc(sizeof(int) * num_nodes);
+    int msg_size;
+    // bool msg_sent = true;
+    int msg_count;
+
+    MPI_Recv(&msg_count, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    printf("We will send message %d times\n", msg_count);
+
+    for (int i = 0; i < msg_count; i++){
+        MPI_Recv(msg, num_nodes, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&msg_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        if (rank == 0)
+            printf("MIS received in main thread:\n");
+        print_arr(msg, msg_size);
+        // MPI_Recv(&msg_sent, 1, MPI_CXX_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+    pthread_join(ntid, NULL);
 
     MPI_Finalize();
 
