@@ -361,12 +361,6 @@ void *MIS(void *args) {
             translate(nodes_remain, &rem);
             
         }
-        
-        if (rank == 0) {
-        // msg_sent = false;
-        for (int i = 0; i < num_procs; i++) 
-            MPI_Send(&msg_count, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
-        }
 
         M.clear();
 
@@ -377,6 +371,11 @@ void *MIS(void *args) {
         MPI_Bcast(rem, num_rem, MPI_INT, 0, MPI_COMM_WORLD);
 
         MPI_Barrier(MPI_COMM_WORLD);
+    }
+    if (rank == 0) {
+        // msg_sent = false;
+        for (int i = 0; i < num_procs; i++) 
+            MPI_Send(&msg_count, 1, MPI_INT, i, 1, MPI_COMM_WORLD);
     }
 
     free(alive);
@@ -483,14 +482,17 @@ int main(int argc, char* argv[]){
     int msg_count;
 
     MPI_Recv(&msg_count, 1, MPI_INT, 0, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    printf("We will send message %d times\n", msg_count);
+    // MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == 0)
+        printf("We will send message %d times\n", msg_count);
 
     for (int i = 0; i < msg_count; i++){
         MPI_Recv(msg, num_nodes, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         MPI_Recv(&msg_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        if (rank == 0)
+        if (rank == 0) {
             printf("MIS received in main thread:\n");
-        print_arr(msg, msg_size);
+            print_arr(msg, msg_size);
+        }
         // MPI_Recv(&msg_sent, 1, MPI_CXX_BOOL, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
     pthread_join(ntid, NULL);
